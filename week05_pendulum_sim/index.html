@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>双摆混沌模拟器 · Double Pendulum · Week 05</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #1a1a24;
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+  }
+  body { display: flex; flex-direction: column; }
+  canvas {
+    display: block;
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    touch-action: none;
+  }
+
+  .panel {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    background: #14141d;
+    border-top: 1px solid rgba(140, 180, 255, 0.12);
+  }
+
+  .scene-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+  }
+  .scene {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 20px;
+    border-radius: 999px;
+    border: 1px solid rgba(130, 200, 255, 0.3);
+    background: rgba(130, 200, 255, 0.08);
+    color: #bfe2ff;
+    font-size: 13px;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease, transform 0.15s ease;
+  }
+  .scene:hover { background: rgba(130, 200, 255, 0.2); }
+  .scene:active { transform: scale(0.96); }
+  .scene.active {
+    background: rgba(130, 200, 255, 0.35);
+    border-color: rgba(130, 200, 255, 0.85);
+    color: #ffffff;
+    box-shadow: 0 0 14px rgba(130, 200, 255, 0.25);
+  }
+  .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 8px;
+  }
+  .dot.earth { background: #4d9fff; box-shadow: 0 0 6px #4d9fff; }
+  .dot.moon { background: #b8c0cc; box-shadow: 0 0 6px #b8c0cc; }
+  .dot.jupiter { background: #e8a04c; box-shadow: 0 0 6px #e8a04c; }
+  .dot.space { background: #8f6fff; box-shadow: 0 0 6px #8f6fff; }
+
+  .controls-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 26px;
+    width: 100%;
+  }
+  .control { display: flex; align-items: center; gap: 10px; }
+  .control label {
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 13px;
+    min-width: 58px;
+    white-space: nowrap;
+  }
+  .control .value {
+    color: #8fc8ff;
+    font-family: Consolas, monospace;
+    font-size: 13px;
+    min-width: 88px;
+    white-space: nowrap;
+  }
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 170px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.15);
+    outline: none;
+    touch-action: manipulation;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #8fc8ff;
+    border: 2px solid #1a1a24;
+    box-shadow: 0 0 10px rgba(130, 200, 255, 0.8);
+    cursor: pointer;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #8fc8ff;
+    border: 2px solid #1a1a24;
+    box-shadow: 0 0 10px rgba(130, 200, 255, 0.8);
+    cursor: pointer;
+  }
+  #resetBtn {
+    padding: 9px 22px;
+    border-radius: 8px;
+    border: 1px solid rgba(130, 200, 255, 0.35);
+    background: rgba(130, 200, 255, 0.12);
+    color: #bfe2ff;
+    font-size: 14px;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background 0.15s ease;
+  }
+  #resetBtn:hover { background: rgba(130, 200, 255, 0.28); }
+  #resetBtn:active { transform: translateY(1px); }
+
+  @media (max-width: 720px) {
+    .panel { padding: 10px 12px; gap: 10px; }
+    .scene { padding: 8px 14px; font-size: 12px; }
+    .controls-row { gap: 10px 16px; }
+    .control { flex: 1 1 100%; justify-content: space-between; }
+    .control label { min-width: 46px; font-size: 12px; }
+    input[type="range"] { width: 100%; flex: 1 1 auto; }
+    .control .value { min-width: 62px; font-size: 12px; }
+    #resetBtn { flex: 1 1 100%; }
+  }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div class="panel">
+  <div class="scene-row">
+    <button type="button" class="scene" data-scene="earth"><span class="dot earth"></span>地球</button>
+    <button type="button" class="scene" data-scene="moon"><span class="dot moon"></span>月球</button>
+    <button type="button" class="scene" data-scene="jupiter"><span class="dot jupiter"></span>木星</button>
+    <button type="button" class="scene" data-scene="space"><span class="dot space"></span>太空</button>
+  </div>
+  <div class="controls-row">
+    <div class="control">
+      <label for="lenSlider">摆长 L</label>
+      <input type="range" id="lenSlider" min="100" max="350" step="1" value="200" />
+      <span class="value" id="lenValue">200 px</span>
+    </div>
+    <div class="control">
+      <label for="gSlider">重力 g</label>
+      <input type="range" id="gSlider" min="0" max="25" step="0.1" value="9.8" />
+      <span class="value" id="gValue">9.80 m/s²</span>
+    </div>
+    <div class="control">
+      <label for="dampSlider">阻尼 b</label>
+      <input type="range" id="dampSlider" min="0" max="0.01" step="0.0001" value="0" />
+      <span class="value" id="dampValue">0.0000</span>
+    </div>
+    <button id="resetBtn" type="button">重置摆动</button>
+  </div>
+</div>
+<script>
+"use strict";
+
+const canvas = document.getElementById("stage");
+const ctx = canvas.getContext("2d");
+
+const PX_PER_METER = 100;
+const M1 = 1;
+const M2 = 1;
+const INIT_THETA1 = Math.PI / 2;
+const INIT_THETA2 = Math.PI / 2;
+const STORAGE_KEY = "week05_pendulum_config";
+const TWEEN_DURATION = 900;
+
+const SCENES = {
+  earth: { g: 9.8 },
+  moon: { g: 1.62 },
+  jupiter: { g: 24.79 },
+  space: { g: 0 }
+};
+
+let lengthPx = 200;
+let gravity = 9.8;
+let damping = 0;
+let activeScene = "earth";
+let gravityTween = null;
+
+let theta1 = INIT_THETA1;
+let omega1 = 0;
+let theta2 = INIT_THETA2;
+let omega2 = 0;
+
+const FIXED_DT = 1 / 300;
+const BOB1_RADIUS = 16;
+const BOB2_RADIUS = 22;
+const TRAIL_MAX = 140;
+const trail = [];
+let trailHue = 0;
+let dragMode = 0;
+
+function viewWidth() { return canvas.clientWidth; }
+function viewHeight() { return canvas.clientHeight; }
+
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(viewWidth() * dpr);
+  canvas.height = Math.round(viewHeight() * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+
+function pivotPoint() {
+  return { x: viewWidth() / 2, y: viewHeight() * 0.30 };
+}
+
+function clampNum(v, lo, hi) {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+function wrapAngle(a) {
+  let r = a;
+  while (r > Math.PI) r -= 2 * Math.PI;
+  while (r < -Math.PI) r += 2 * Math.PI;
+  return r;
+}
+
+function derivs(y, l1, l2, g, c) {
+  const t1 = y[0];
+  const w1 = y[1];
+  const t2 = y[2];
+  const w2 = y[3];
+  const delta = t1 - t2;
+  const sinD = Math.sin(delta);
+  const cosD = Math.cos(delta);
+  const denom = 2 * M1 + M2 - M2 * Math.cos(2 * t1 - 2 * t2);
+  const a1 = (
+    -g * (2 * M1 + M2) * Math.sin(t1)
+    - M2 * g * Math.sin(t1 - 2 * t2)
+    - 2 * sinD * M2 * (w2 * w2 * l2 + w1 * w1 * l1 * cosD)
+  ) / (l1 * denom) - c * w1;
+  const a2 = (
+    2 * sinD * (
+      w1 * w1 * l1 * (M1 + M2)
+      + g * (M1 + M2) * Math.cos(t1)
+      + w2 * w2 * l2 * M2 * cosD
+    )
+  ) / (l2 * denom) - c * w2;
+  return [w1, a1, w2, a2];
+}
+
+function rk4Step(y, dt, l1, l2, g, c) {
+  const k1 = derivs(y, l1, l2, g, c);
+  const y2 = [
+    y[0] + dt / 2 * k1[0], y[1] + dt / 2 * k1[1],
+    y[2] + dt / 2 * k1[2], y[3] + dt / 2 * k1[3]
+  ];
+  const k2 = derivs(y2, l1, l2, g, c);
+  const y3 = [
+    y[0] + dt / 2 * k2[0], y[1] + dt / 2 * k2[1],
+    y[2] + dt / 2 * k2[2], y[3] + dt / 2 * k2[3]
+  ];
+  const k3 = derivs(y3, l1, l2, g, c);
+  const y4 = [
+    y[0] + dt * k3[0], y[1] + dt * k3[1],
+    y[2] + dt * k3[2], y[3] + dt * k3[3]
+  ];
+  const k4 = derivs(y4, l1, l2, g, c);
+  return [
+    y[0] + dt / 6 * (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0]),
+    y[1] + dt / 6 * (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1]),
+    y[2] + dt / 6 * (k1[2] + 2 * k2[2] + 2 * k3[2] + k4[2]),
+    y[3] + dt / 6 * (k1[3] + 2 * k2[3] + 2 * k3[3] + k4[3])
+  ];
+}
+
+function advancePhysics(dt) {
+  const l1 = lengthPx / PX_PER_METER;
+  const l2 = l1;
+  const g = gravity;
+  const c = damping * 100;
+  const y = rk4Step([theta1, omega1, theta2, omega2], dt, l1, l2, g, c);
+  theta1 = wrapAngle(y[0]);
+  omega1 = y[1];
+  theta2 = wrapAngle(y[2]);
+  omega2 = y[3];
+  if (!Number.isFinite(theta1) || !Number.isFinite(omega1) ||
+      !Number.isFinite(theta2) || !Number.isFinite(omega2)) {
+    resetAnimation();
+  }
+}
+
+function totalEnergy() {
+  const l1 = lengthPx / PX_PER_METER;
+  const l2 = l1;
+  const g = gravity;
+  const delta = theta1 - theta2;
+  const v2sq = l1 * l1 * omega1 * omega1
+    + l2 * l2 * omega2 * omega2
+    + 2 * l1 * l2 * omega1 * omega2 * Math.cos(delta);
+  const ke = 0.5 * M1 * (l1 * omega1) * (l1 * omega1) + 0.5 * M2 * v2sq;
+  const pe = -(M1 + M2) * g * l1 * Math.cos(theta1) - M2 * g * l2 * Math.cos(theta2);
+  return ke + pe;
+}
+
+function computePositions() {
+  const p = pivotPoint();
+  const b1 = {
+    x: p.x + lengthPx * Math.sin(theta1),
+    y: p.y + lengthPx * Math.cos(theta1)
+  };
+  const b2 = {
+    x: b1.x + lengthPx * Math.sin(theta2),
+    y: b1.y + lengthPx * Math.cos(theta2)
+  };
+  return { p: p, b1: b1, b2: b2 };
+}
+
+function updateTrail(b2) {
+  trail.push({ x: b2.x, y: b2.y, hue: trailHue });
+  if (trail.length > TRAIL_MAX) trail.shift();
+  trailHue = (trailHue + 0.9) % 360;
+}
+
+function drawBackground() {
+  const w = viewWidth();
+  const h = viewHeight();
+  ctx.fillStyle = "#1a1a24";
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.035)";
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= w; x += 48) {
+    ctx.beginPath();
+    ctx.moveTo(x + 0.5, 0);
+    ctx.lineTo(x + 0.5, h);
+    ctx.stroke();
+  }
+  for (let y = 0; y <= h; y += 48) {
+    ctx.beginPath();
+    ctx.moveTo(0, y + 0.5);
+    ctx.lineTo(w, y + 0.5);
+    ctx.stroke();
+  }
+}
+
+function drawTrail() {
+  if (trail.length < 2) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  for (let i = 1; i < trail.length; i++) {
+    const a = i / trail.length;
+    ctx.strokeStyle = "hsla(" + trail[i].hue + ", 95%, 60%, " + (0.03 + 0.42 * a * a).toFixed(3) + ")";
+    ctx.lineWidth = 1.2 + 5.5 * a;
+    ctx.beginPath();
+    ctx.moveTo(trail[i - 1].x, trail[i - 1].y);
+    ctx.lineTo(trail[i].x, trail[i].y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawArms(pos) {
+  ctx.strokeStyle = "rgba(190, 205, 235, 0.55)";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(pos.p.x, pos.p.y);
+  ctx.lineTo(pos.b1.x, pos.b1.y);
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(210, 225, 250, 0.7)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(pos.b1.x, pos.b1.y);
+  ctx.lineTo(pos.b2.x, pos.b2.y);
+  ctx.stroke();
+
+  ctx.fillStyle = "#10101c";
+  ctx.fillRect(pos.p.x - 72, pos.p.y - 10, 144, 12);
+  ctx.fillStyle = "rgba(160, 185, 230, 0.9)";
+  ctx.beginPath();
+  ctx.arc(pos.p.x, pos.p.y, 7, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawGlowBob(x, y, r, hue) {
+  const halo = ctx.createRadialGradient(x, y, r * 0.3, x, y, r * 2.8);
+  halo.addColorStop(0, "hsla(" + hue + ", 90%, 70%, 0.30)");
+  halo.addColorStop(1, "hsla(" + hue + ", 90%, 70%, 0)");
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 2.8, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.shadowColor = "hsla(" + hue + ", 95%, 75%, 0.9)";
+  ctx.shadowBlur = 26;
+  const core = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r);
+  core.addColorStop(0, "#f2f9ff");
+  core.addColorStop(0.45, "#8fc8ff");
+  core.addColorStop(1, "#2c63a8");
+  ctx.fillStyle = core;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawHud() {
+  const h = viewHeight();
+  const e = totalEnergy();
+  const deg1 = (theta1 * 180) / Math.PI;
+  const deg2 = (theta2 * 180) / Math.PI;
+
+  ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+  ctx.font = "600 22px 'Segoe UI', 'Microsoft YaHei', sans-serif";
+  ctx.fillText("双摆混沌模拟器 · Double Pendulum", 28, 42);
+
+  ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
+  ctx.font = "13px 'Segoe UI', 'Microsoft YaHei', sans-serif";
+  ctx.fillText("Week 05 · 田文朗 5715126023 · 物理学", 28, 66);
+  ctx.fillText("拉格朗日运动方程 + Runge-Kutta 4 阶积分 · 鼠标拖拽摆球改变初始角度后释放", 28, 86);
+
+  ctx.fillStyle = "rgba(255, 255, 255, 0.72)";
+  ctx.font = "14px Consolas, monospace";
+  ctx.fillText(
+    "L = " + Math.round(lengthPx) + " px    g = " + gravity.toFixed(2) + " m/s²    b = " + damping.toFixed(4)
+    + "    m₁ = m₂ = 1    θ₀ = 90°",
+    28, h - 70
+  );
+  ctx.fillText(
+    "θ₁ = " + deg1.toFixed(1) + "°    θ₂ = " + deg2.toFixed(1) + "°    ω₁ = " + omega1.toFixed(2)
+    + " rad/s    ω₂ = " + omega2.toFixed(2) + " rad/s",
+    28, h - 46
+  );
+  ctx.fillText("E = " + e.toFixed(3) + " J", 28, h - 22);
+}
+
+const lenSlider = document.getElementById("lenSlider");
+const gSlider = document.getElementById("gSlider");
+const dampSlider = document.getElementById("dampSlider");
+const lenValue = document.getElementById("lenValue");
+const gValue = document.getElementById("gValue");
+const dampValue = document.getElementById("dampValue");
+const resetBtn = document.getElementById("resetBtn");
+const sceneButtons = Array.prototype.slice.call(document.querySelectorAll(".scene"));
+
+function matchSceneFromGravity(g) {
+  const keys = Object.keys(SCENES);
+  for (let i = 0; i < keys.length; i++) {
+    if (Math.abs(SCENES[keys[i]].g - g) < 0.05) return keys[i];
+  }
+  return "";
+}
+
+function updateSceneUI() {
+  for (let i = 0; i < sceneButtons.length; i++) {
+    const on = sceneButtons[i].getAttribute("data-scene") === activeScene;
+    if (on) sceneButtons[i].classList.add("active");
+    else sceneButtons[i].classList.remove("active");
+  }
+}
+
+function syncGravityUI() {
+  const shown = Math.round(gravity * 10) / 10;
+  gSlider.value = String(shown);
+  gValue.textContent = gravity.toFixed(2) + " m/s²";
+}
+
+function syncAllUI() {
+  lenSlider.value = String(Math.round(lengthPx));
+  lenValue.textContent = Math.round(lengthPx) + " px";
+  syncGravityUI();
+  dampSlider.value = String(damping);
+  dampValue.textContent = damping.toFixed(4);
+  updateSceneUI();
+}
+
+function saveConfig(overrideGravity) {
+  const gValueToSave = Number.isFinite(overrideGravity) ? overrideGravity : gravity;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      lengthPx: lengthPx,
+      gravity: gValueToSave,
+      damping: damping,
+      scene: activeScene
+    }));
+  } catch (err) {
+    return;
+  }
+}
+
+function loadConfig() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const cfg = JSON.parse(raw);
+    if (!cfg || typeof cfg !== "object") return null;
+    return cfg;
+  } catch (err) {
+    return null;
+  }
+}
+
+function applyConfig(cfg) {
+  if (Number.isFinite(cfg.lengthPx)) lengthPx = clampNum(cfg.lengthPx, 100, 350);
+  if (Number.isFinite(cfg.gravity)) gravity = clampNum(cfg.gravity, 0, 25);
+  if (Number.isFinite(cfg.damping)) damping = clampNum(cfg.damping, 0, 0.01);
+  if (typeof cfg.scene === "string" && SCENES[cfg.scene]) activeScene = cfg.scene;
+  else activeScene = matchSceneFromGravity(gravity);
+}
+
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function setScene(name, targetG) {
+  activeScene = name;
+  updateSceneUI();
+  if (Math.abs(gravity - targetG) < 1e-9) {
+    gravityTween = null;
+  } else {
+    gravityTween = {
+      from: gravity,
+      to: targetG,
+      start: performance.now(),
+      duration: TWEEN_DURATION
+    };
+  }
+  saveConfig(targetG);
+}
+
+lenSlider.addEventListener("input", function () {
+  lengthPx = Number(lenSlider.value);
+  lenValue.textContent = Math.round(lengthPx) + " px";
+  trail.length = 0;
+  saveConfig();
+});
+
+gSlider.addEventListener("input", function () {
+  gravityTween = null;
+  gravity = Number(gSlider.value);
+  gValue.textContent = gravity.toFixed(2) + " m/s²";
+  activeScene = matchSceneFromGravity(gravity);
+  updateSceneUI();
+  saveConfig();
+});
+
+dampSlider.addEventListener("input", function () {
+  damping = Number(dampSlider.value);
+  dampValue.textContent = damping.toFixed(4);
+  saveConfig();
+});
+
+for (let i = 0; i < sceneButtons.length; i++) {
+  sceneButtons[i].addEventListener("click", function () {
+    const name = sceneButtons[i].getAttribute("data-scene");
+    const scene = SCENES[name];
+    if (!scene) return;
+    setScene(name, scene.g);
+  });
+}
+
+function resetAnimation() {
+  theta1 = INIT_THETA1;
+  omega1 = 0;
+  theta2 = INIT_THETA2;
+  omega2 = 0;
+  trail.length = 0;
+}
+resetBtn.addEventListener("click", resetAnimation);
+
+function pointerPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+canvas.addEventListener("pointerdown", function (e) {
+  const pos = pointerPos(e);
+  const p = computePositions();
+  const d2 = (pos.x - p.b2.x) * (pos.x - p.b2.x) + (pos.y - p.b2.y) * (pos.y - p.b2.y);
+  const d1 = (pos.x - p.b1.x) * (pos.x - p.b1.x) + (pos.y - p.b1.y) * (pos.y - p.b1.y);
+  if (d2 <= (BOB2_RADIUS + 12) * (BOB2_RADIUS + 12)) dragMode = 2;
+  else if (d1 <= (BOB1_RADIUS + 12) * (BOB1_RADIUS + 12)) dragMode = 1;
+  if (dragMode) {
+    if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
+    omega1 = 0;
+    omega2 = 0;
+    e.preventDefault();
+  }
+});
+
+canvas.addEventListener("pointermove", function (e) {
+  const pos = pointerPos(e);
+  const p = computePositions();
+  if (dragMode === 1) {
+    theta1 = wrapAngle(Math.atan2(pos.x - p.p.x, pos.y - p.p.y));
+    omega1 = 0;
+    omega2 = 0;
+  } else if (dragMode === 2) {
+    theta2 = wrapAngle(Math.atan2(pos.x - p.b1.x, pos.y - p.b1.y));
+    omega1 = 0;
+    omega2 = 0;
+  } else {
+    const d2 = (pos.x - p.b2.x) * (pos.x - p.b2.x) + (pos.y - p.b2.y) * (pos.y - p.b2.y);
+    const d1 = (pos.x - p.b1.x) * (pos.x - p.b1.x) + (pos.y - p.b1.y) * (pos.y - p.b1.y);
+    const near = d2 <= (BOB2_RADIUS + 12) * (BOB2_RADIUS + 12)
+      || d1 <= (BOB1_RADIUS + 12) * (BOB1_RADIUS + 12);
+    canvas.style.cursor = near ? "grab" : "default";
+  }
+});
+
+window.addEventListener("pointerup", function () {
+  if (dragMode) {
+    dragMode = 0;
+    omega1 = 0;
+    omega2 = 0;
+  }
+});
+
+const savedConfig = loadConfig();
+if (savedConfig) applyConfig(savedConfig);
+activeScene = matchSceneFromGravity(gravity) || activeScene;
+syncAllUI();
+saveConfig();
+
+let lastTime = performance.now();
+let accumulator = 0;
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  let frameDt = (now - lastTime) / 1000;
+  lastTime = now;
+  if (frameDt > 0.05) frameDt = 0.05;
+
+  if (gravityTween) {
+    const u = (now - gravityTween.start) / gravityTween.duration;
+    if (u >= 1) {
+      gravity = gravityTween.to;
+      gravityTween = null;
+    } else {
+      gravity = gravityTween.from + (gravityTween.to - gravityTween.from) * easeInOutCubic(u);
+    }
+    syncGravityUI();
+  }
+
+  if (dragMode === 0) {
+    accumulator += frameDt;
+    while (accumulator >= FIXED_DT) {
+      advancePhysics(FIXED_DT);
+      accumulator -= FIXED_DT;
+    }
+  } else {
+    accumulator = 0;
+  }
+
+  drawBackground();
+
+  const pos = computePositions();
+  updateTrail(pos.b2);
+  drawTrail();
+  drawArms(pos);
+  drawGlowBob(pos.b1.x, pos.b1.y, BOB1_RADIUS, 210);
+  drawGlowBob(pos.b2.x, pos.b2.y, BOB2_RADIUS, trailHue);
+  drawHud();
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
